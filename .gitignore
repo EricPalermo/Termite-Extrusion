@@ -1,2 +1,5 @@
 *.atoms
 *.dump
+slurm-*
+jobscript_*
+
