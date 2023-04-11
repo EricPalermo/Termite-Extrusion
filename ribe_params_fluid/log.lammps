@@ -1,0 +1,213 @@
+LAMMPS (29 Oct 2020)
+OMP_NUM_THREADS environment is not set. Defaulting to 1 thread. (src/rlammps/rlammps_oxidation/src/comm.cpp:94)
+  using 1 OpenMP thread(s) per MPI task
+####################################################
+## RHEO wall-debug branch, 3/28/2022              ##
+## Run poiseuille inlet                           ##
+####################################################
+
+dimension          3
+units              lj
+atom_style         rheo
+boundary           f p p
+comm_modify        vel yes
+newton on
+
+# processors         128 1 1
+
+############################################
+## Re Parameters ##
+############################################
+
+variable           sf equal 1 #/${L} #scaling of unit cell
+
+############################################
+## Particle Lattice/Resolution Parameters ##
+############################################
+
+variable           nb equal 1    #number of basis atoms depends on lattice
+variable           n equal ${nb}/(${sf}^3)
+variable           n equal 1/(${sf}^3)
+variable           n equal 1/(1^3)
+variable           del equal ${sf}#*sqrt(2)
+variable           del equal 1
+variable           hd equal 3.0
+variable           h3 equal ${hd}*${del}
+variable           h3 equal 3*${del}
+variable           h3 equal 3*1
+
+############################################
+##              Create box                ##
+############################################
+
+# read_data            ../../nozzle_data_H7p5.data
+region             box block 0 60 0 25 0 25 units box
+create_box         3 box
+Created orthogonal box = (0.0000000 0.0000000 0.0000000) to (60.000000 25.000000 25.000000)
+  8 by 4 by 4 MPI processor grid
+lattice              sc ${n}
+lattice              sc 1
+Lattice spacing in x,y,z = 1.0000000 1.0000000 1.0000000
+
+region             plate block 54 57 EDGE EDGE EDGE EDGE units box
+create_atoms       2 region plate
+Created 2500 atoms
+  create_atoms CPU = 0.002 seconds
+# region               hopper cylinder x 8.5 8.5 6.25 4.5 8 units box
+# create_atoms         1 region hopper
+
+# region             nozzle_all cylinder x 8.5 8.5 6.25 1.5 18.5 units box
+# group              nozzle_all dynamic all region nozzle_all every 100
+
+variable           fext_type atom (type==1) #includes original fluid and solid inlet
+group              fext_group dynamic all var fext_type
+dynamic group fext_group defined
+
+group              fluid type 1
+0 atoms in group fluid
+group              solid_fixed type 2
+2500 atoms in group solid_fixed
+group              solid_moving type 3
+0 atoms in group solid_moving
+group              solid union solid_fixed solid_moving
+2500 atoms in group solid
+
+
+variable           strip_width equal $(lx/20)
+variable           strip_width equal 3
+change_box         all x final $(xlo) $(xhi+v_strip_width) units box
+change_box         all x final 0 $(xhi+v_strip_width) units box
+change_box         all x final 0 63 units box
+Changing box ...
+  orthogonal box = (0.0000000 0.0000000 0.0000000) to (63.000000 25.000000 25.000000)
+# Expand box to the right by a distance equal to the length inserted
+
+# Shift atoms by same increment
+displace_atoms     all move ${strip_width} 0 0
+displace_atoms     all move 3 0 0
+Displacing atoms ...
+
+variable           seed equal 135414
+variable           dr equal 0.1*${del}
+variable           dr equal 0.1*1
+# displace_atoms     fluid random ${dr} ${dr} 0 ${seed} units box
+
+
+############################################
+##         Potential parameters           ##
+############################################
+
+# variable           T_C equal 145/240 #from NIST challenge statement
+# variable           T_m equal 217.5/240 #looked up online
+
+variable           rho0 equal 1.0
+variable           mp equal ${rho0}/${n}
+variable           mp equal 1/${n}
+variable           mp equal 1/1
+variable           cs equal 20
+variable           zeta equal 1
+variable           D equal 1e-2 #thermal diffusivity
+variable	       kappa equal ${D}*${rho0}/${mp}
+variable	       kappa equal 0.01*${rho0}/${mp}
+variable	       kappa equal 0.01*1/${mp}
+variable	       kappa equal 0.01*1/1
+variable           eta equal 100
+
+
+#freeze parameters
+variable           cutb equal 1.5*${sf}
+variable           cutb equal 1.5*1
+variable           k equal 20*0.1*${h3}/${cs}/3 #at least 20x dt
+variable           k equal 20*0.1*3/${cs}/3 
+variable           k equal 20*0.1*3/20/3 
+variable           gamma equal 10*0.1*${h3}/${cs}/3 #~10x dt
+variable           gamma equal 10*0.1*3/${cs}/3 
+variable           gamma equal 10*0.1*3/20/3 
+variable           Dr equal 0.1*${h3}*${cs}
+variable           Dr equal 0.1*3*${cs}
+variable           Dr equal 0.1*3*20
+
+pair_style         rheo ${h3} artificial/visc ${zeta} rho/damp ${Dr} #rheo/react #thermal/expand
+pair_style         rheo 3 artificial/visc ${zeta} rho/damp ${Dr} 
+pair_style         rheo 3 artificial/visc 1 rho/damp ${Dr} 
+pair_style         rheo 3 artificial/visc 1 rho/damp 6 
+pair_coeff         * * ${rho0} ${cs}
+pair_coeff         * * 1 ${cs}
+pair_coeff         * * 1 20
+WARNING: Need c = 1 for assumption in compute rheo/solids (src/rlammps/rlammps_oxidation/src/pair_rheo.cpp:492)
+# pair_coeff         * * rheo/react ${h3} 1.5 1.0 0.05 1.0 100 2.0 0.75 2.0
+                                  #cut #cutb #k #eps #gam #t #rlim #sig #krepel(deprecated)
+# pair_coeff         * * rheo/freeze ${h3} .75 0.25 0.5 0.05 0.5  #0.05 0.5 0.01
+                                  # cut  cutb k  sig eps  gamma
+
+
+############################################
+##         Particle Properties            ##
+############################################
+
+mass               1 ${mp}
+mass               1 1
+mass               2 ${mp}
+mass               2 1
+mass               3 ${mp}
+mass               3 1
+
+set                group all rho ${rho0}
+set                group all rho 1
+Setting atom values ...
+  2500 settings made for rho
+set                group all phase 0
+Setting atom values ...
+  2500 settings made for phase
+set                group solid_fixed phase 5
+Setting atom values ...
+  2500 settings made for phase
+set                group solid_moving phase 5
+Setting atom values ...
+  0 settings made for phase
+
+set                group all temp 1.0
+Setting atom values ...
+  2500 settings made for temp
+# set                group solid_moving temp ${T_C}
+
+velocity           all set 0 0 0
+
+############################################
+##         Integration and fixes          ##
+############################################
+
+variable           U_L equal 0.01 #should be 2x your desired speed (since sf=0.5)
+variable           T_tot equal ly/(${U_L}/2)
+variable           T_tot equal ly/(0.01/2)
+
+#CFL criterion
+variable           dt equal 0.025
+timestep           ${dt}
+timestep           0.025
+# Redefine to a more "round" number
+variable           g equal 1.64e-8
+variable           fext equal ${g}/${n}
+variable           fext equal 1.64e-08/${n}
+variable           fext equal 1.64e-08/1
+
+fix                1 all rheo ${h3} Quintic 5 shift
+fix                1 all rheo 3 Quintic 5 shift
+fix                2 all rheo/viscosity constant ${eta}
+fix                2 all rheo/viscosity constant 100
+# fix                3 fluid addforce ${fext} 0.0 0.0
+fix                4 fext_group addforce ${fext} 0.0 0.0
+fix                4 fext_group addforce 1.64e-08 0.0 0.0
+fix                5 solid_fixed setforce 0.0 0.0 0.0
+# fix                6 solid_moving setforce 0.0 0.0 0.0
+# fix                7 solid_moving move linear 0.0 ${U_L} 0.0 #this value scales with sf and is not absolute
+fix                8 all rheo/surface ${h3} 2.5 4
+fix                8 all rheo/surface 3 2.5 4
+fix                9 all rheo/inlet ${h3} data_inlet_0p5 ${strip_width} $(v_strip_width/300)
+fix                9 all rheo/inlet 3 data_inlet_0p5 ${strip_width} $(v_strip_width/300)
+fix                9 all rheo/inlet 3 data_inlet_0p5 3 $(v_strip_width/300)
+fix                9 all rheo/inlet 3 data_inlet_0p5 3 0.010000000000000000208
+# fix                10 thermal_group rheo/thermal conductivity constant ${kappa} cv constant 1.0 Tfreeze constant ${T_m} #alpha constant 0.01
+# Args are file, width of insertion, velocity of inserted particles.
+#
+# Some requireme
